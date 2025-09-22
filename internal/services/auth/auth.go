@@ -1,11 +1,11 @@
 package auth
 
 import (
+	domain_errors "auth-service/internal/domain/errors"
 	"auth-service/internal/domain/models"
 	"auth-service/internal/lib/jwt"
-	"auth-service/internal/storage"
 	"context"
-	"errors"
+	"fmt"
 	"log"
 
 	"golang.org/x/crypto/bcrypt"
@@ -32,10 +32,6 @@ type UserProvider interface {
 	GetUser(ctx context.Context, email string) (*models.User, error)
 }
 
-var (
-	ErrInvalidCredentials = errors.New("Invalid username or password")
-)
-
 // New returns a new instance of the Auth service
 func New(
 	userSaver UserSaver,
@@ -53,22 +49,17 @@ func (a *Auth) Login(ctx context.Context, email, password string) (string, error
 	user, err := a.userProvider.GetUser(ctx, email)
 
 	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Println(err)
-			return "", ErrInvalidCredentials
-		} else {
-			return "", err
-		}
+		return "", fmt.Errorf("failed to get user: %w", err)
 	}
 
 	if err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
-		return "", ErrInvalidCredentials
+		return "", domain_errors.ErrInvalidCredentials
 	}
 
 	token, err := a.jwtService.NewToken(user)
 
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
 
 	return token, nil
@@ -84,19 +75,14 @@ func (a *Auth) Register(
 ) (userId int64, err error) {
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println("Failed to generate password hash", err)
-		return 0, err
+		log.Println("failed to generate password hash", err)
+		return 0, fmt.Errorf("failed to generate password hash")
 	}
 
 	id, err := a.userSaver.SaveUser(ctx, email, username, passHash, firstName, lastName)
 	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Println(err)
-			return 0, err
-		}
-		log.Println("Failed to save user", err)
-		return 0, err
+		return 0, fmt.Errorf("could not register new user: %w", err)
 	}
 
-	return id, err
+	return id, nil
 }

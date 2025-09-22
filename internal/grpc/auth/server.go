@@ -1,7 +1,10 @@
 package auth
 
 import (
+	domain_errors "auth-service/internal/domain/errors"
 	"context"
+	"errors"
+	"log"
 	"net/mail"
 
 	userservice "github.com/NormVR/smap_protobuf/gen"
@@ -45,7 +48,16 @@ func (s *ServerApi) CreateUser(
 
 	userId, err := s.auth.Register(ctx, req.Email, req.Username, req.Password, req.FirstName, req.LastName)
 	if err != nil {
-		return nil, err
+		log.Printf("failed to register user: %v", err)
+
+		switch {
+		case errors.Is(err, domain_errors.ErrUserEmailExists):
+			return nil, status.Errorf(codes.AlreadyExists, domain_errors.ErrUserEmailExists.Error())
+		case errors.Is(err, domain_errors.ErrUserUsernameExists):
+			return nil, status.Errorf(codes.AlreadyExists, domain_errors.ErrUserUsernameExists.Error())
+		default:
+			return nil, status.Errorf(codes.Internal, "internal server error")
+		}
 	}
 
 	return &userservice.CreateUserResponse{
@@ -61,7 +73,16 @@ func (s *ServerApi) Login(ctx context.Context, req *userservice.LoginRequest) (*
 
 	token, err := s.auth.Login(ctx, req.Email, req.Password)
 	if err != nil {
-		return nil, err
+		log.Printf("failed to login: %v", err)
+
+		switch {
+		case errors.Is(err, domain_errors.ErrInvalidCredentials):
+			return nil, status.Errorf(codes.Unauthenticated, domain_errors.ErrInvalidCredentials.Error())
+		case errors.Is(err, domain_errors.ErrUserNotFound):
+			return nil, status.Errorf(codes.Unauthenticated, domain_errors.ErrInvalidCredentials.Error())
+		default:
+			return nil, status.Errorf(codes.Internal, "internal server error")
+		}
 	}
 
 	return &userservice.LoginResponse{

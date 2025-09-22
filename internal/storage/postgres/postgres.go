@@ -1,11 +1,12 @@
 package postgres
 
 import (
+	domain_errors "auth-service/internal/domain/errors"
 	"auth-service/internal/domain/models"
-	"auth-service/internal/storage"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/jackc/pgx/v5"
@@ -27,6 +28,7 @@ func New(storagePath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
+// SaveUser saves a user into DB
 func (s *Storage) SaveUser(
 	ctx context.Context,
 	email string,
@@ -49,23 +51,30 @@ func (s *Storage) SaveUser(
 		var pgxErr *pgconn.PgError
 
 		if errors.As(err, &pgxErr) && pgxErr.Code == "23505" {
-			return 0, storage.ErrUserExists
+			switch pgxErr.ConstraintName {
+			case "users_email_key":
+				return 0, domain_errors.ErrUserEmailExists
+			case "users_username_key":
+				return 0, domain_errors.ErrUserUsernameExists
+			default:
+				return 0, fmt.Errorf("unknown unique constraint error: %w", err)
+			}
 		}
 
-		return 0, err
+		return 0, fmt.Errorf("failed to insert user: %w", err)
 	}
 
 	if res.Next() {
 		err = res.Scan(&insertID)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("failed to get last ID: %w", err)
 		}
 	}
 
 	return insertID, err
 }
 
-// GetUser
+// GetUser loads user from DB
 func (s *Storage) GetUser(ctx context.Context, email string) (*models.User, error) {
 	stmt, err := s.db.PrepareContext(ctx, `SELECT id, email, username, firstname, lastname, pass_hash FROM users WHERE email=$1`)
 
@@ -84,9 +93,9 @@ func (s *Storage) GetUser(ctx context.Context, email string) (*models.User, erro
 		&user.PassHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, storage.ErrUserNotFound
+			return nil, domain_errors.ErrUserNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	return &user, nil
 }
