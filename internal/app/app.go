@@ -20,7 +20,7 @@ func New(
 		panic(err)
 	}
 
-	jwtService := jwt.NewJwtService(config.JwtSecret, config.TokenExpireHours)
+	jwtService := jwt.NewJwtService([]byte(config.JwtSecret), config.TokenExpireHours)
 	authService := auth.New(storage, storage, jwtService)
 
 	grpcApp := grpcapp.New(authService, config.GrpcPort)

@@ -65,6 +65,10 @@ func (a *Auth) Login(ctx context.Context, email, password string) (string, error
 	return token, nil
 }
 
+func (a *Auth) ValidateToken(token string) int64 {
+	return a.jwtService.ValidateToken(token)
+}
+
 func (a *Auth) Register(
 	ctx context.Context,
 	email string,

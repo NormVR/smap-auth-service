@@ -27,6 +27,9 @@ type Auth interface {
 		email string,
 		password string,
 	) (token string, err error)
+	ValidateToken(
+		token string,
+	) (userId int64)
 }
 
 type ServerApi struct {
@@ -87,6 +90,22 @@ func (s *ServerApi) Login(ctx context.Context, req *userservice.LoginRequest) (*
 
 	return &userservice.LoginResponse{
 		JwtToken: token,
+	}, nil
+}
+
+func (s *ServerApi) ValidateToken(ctx context.Context, req *userservice.TokenRequest) (*userservice.UserResponse, error) {
+	if req.JwtToken == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "Token is empty")
+	}
+
+	userId := s.auth.ValidateToken(req.JwtToken)
+
+	if userId == 0 {
+		return nil, status.Errorf(codes.Unauthenticated, "Token is Invalid")
+	}
+
+	return &userservice.UserResponse{
+		UserId: userId,
 	}, nil
 }
 
