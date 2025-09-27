@@ -22,20 +22,20 @@ func NewJwtService(secret []byte, duration time.Duration) *JwtService {
 	}
 }
 
-func (j *JwtService) NewToken(user *models.User) (string, error) {
+func (j *JwtService) NewToken(user *models.User) (string, time.Duration, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"uid":   user.ID,
 		"email": user.Email,
 		"exp":   time.Now().Add(j.duration).Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte(j.secret))
+	tokenString, err := token.SignedString(j.secret)
 
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	return tokenString, nil
+	return tokenString, j.duration, nil
 }
 
 func (j *JwtService) ValidateToken(tokenString string) int64 {

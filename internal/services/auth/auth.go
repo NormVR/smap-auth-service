@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"auth-service/internal/config"
 	domain_errors "auth-service/internal/domain/errors"
 	"auth-service/internal/domain/models"
 	"auth-service/internal/lib/jwt"
 	"context"
 	"fmt"
 	"log"
+
+	"auth-service/internal/storage/redis"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -15,6 +18,8 @@ type Auth struct {
 	userSaver    UserSaver
 	userProvider UserProvider
 	jwtService   *jwt.JwtService
+	config       *config.Config
+	redis        *redis.Redis
 }
 
 type UserSaver interface {
@@ -37,11 +42,15 @@ func New(
 	userSaver UserSaver,
 	userProvider UserProvider,
 	jwtService *jwt.JwtService,
+	config *config.Config,
+	redisClient *redis.Redis,
 ) *Auth {
 	return &Auth{
 		userSaver:    userSaver,
 		userProvider: userProvider,
 		jwtService:   jwtService,
+		config:       config,
+		redis:        redisClient,
 	}
 }
 
@@ -56,11 +65,13 @@ func (a *Auth) Login(ctx context.Context, email, password string) (string, error
 		return "", domain_errors.ErrInvalidCredentials
 	}
 
-	token, err := a.jwtService.NewToken(user)
+	token, duration, err := a.jwtService.NewToken(user)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
+
+	a.redis.StoreToken("token:"+token, user.ID, duration)
 
 	return token, nil
 }
@@ -89,4 +100,13 @@ func (a *Auth) Register(
 	}
 
 	return id, nil
+}
+
+func (a *Auth) Logout(token string) error {
+	err := a.redis.RemoveToken("token:" + token)
+	if err != nil {
+		return fmt.Errorf("could not remove token from redis: %w", err)
+	}
+
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"auth-service/internal/lib/jwt"
 	"auth-service/internal/services/auth"
 	"auth-service/internal/storage/postgres"
+	"auth-service/internal/storage/redis"
 )
 
 type App struct {
@@ -21,7 +22,8 @@ func New(
 	}
 
 	jwtService := jwt.NewJwtService([]byte(config.JwtSecret), config.TokenExpireHours)
-	authService := auth.New(storage, storage, jwtService)
+	redisClient := redis.NewRedis(config)
+	authService := auth.New(storage, storage, jwtService, config, redisClient)
 
 	grpcApp := grpcapp.New(authService, config.GrpcPort)
 	return &App{

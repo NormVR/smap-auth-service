@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Auth interface {
@@ -30,6 +31,9 @@ type Auth interface {
 	ValidateToken(
 		token string,
 	) (userId int64)
+	Logout(
+		token string,
+	) error
 }
 
 type ServerApi struct {
@@ -107,6 +111,21 @@ func (s *ServerApi) ValidateToken(ctx context.Context, req *userservice.TokenReq
 	return &userservice.UserResponse{
 		UserId: userId,
 	}, nil
+}
+
+func (s *ServerApi) Logout(ctx context.Context, req *userservice.TokenRequest) (*emptypb.Empty, error) {
+	if req.JwtToken == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "Token is empty")
+	}
+
+	err := s.auth.Logout(req.JwtToken)
+
+	if err != nil {
+		log.Printf("failed to logout: %v", err)
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+
+	return nil, nil
 }
 
 func validateRegisterData(req *userservice.CreateUserRequest) error {
