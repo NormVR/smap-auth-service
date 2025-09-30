@@ -4,12 +4,10 @@ import (
 	"auth-service/internal/config"
 	domain_errors "auth-service/internal/domain/errors"
 	"auth-service/internal/domain/models"
-	"auth-service/internal/lib/jwt"
 	"context"
 	"fmt"
 	"log"
-
-	"auth-service/internal/storage/redis"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -17,9 +15,9 @@ import (
 type Auth struct {
 	userSaver    UserSaver
 	userProvider UserProvider
-	jwtService   *jwt.JwtService
+	jwtService   TokenProvider
 	config       *config.Config
-	redis        *redis.Redis
+	redis        Cache
 }
 
 type UserSaver interface {
@@ -37,13 +35,23 @@ type UserProvider interface {
 	GetUser(ctx context.Context, email string) (*models.User, error)
 }
 
+type Cache interface {
+	StoreToken(key string, value int64, ttl time.Duration)
+	RemoveToken(key string) error
+}
+
+type TokenProvider interface {
+	NewToken(user *models.User) (string, time.Duration, error)
+	ValidateToken(tokenString string) int64
+}
+
 // New returns a new instance of the Auth service
 func New(
 	userSaver UserSaver,
 	userProvider UserProvider,
-	jwtService *jwt.JwtService,
+	jwtService TokenProvider,
 	config *config.Config,
-	redisClient *redis.Redis,
+	redisClient Cache,
 ) *Auth {
 	return &Auth{
 		userSaver:    userSaver,
