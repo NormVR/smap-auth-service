@@ -7,7 +7,8 @@ import (
 	"log"
 	"net/mail"
 
-	userservice "github.com/NormVR/smap_protobuf/gen"
+	authService "github.com/NormVR/smap_protobuf/gen/services/auth_service"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,11 +19,8 @@ type Auth interface {
 	Register(
 		ctx context.Context,
 		email string,
-		username string,
 		password string,
-		firstName string,
-		lastName string,
-	) (userId int64, err error)
+	) (userId uuid.UUID, err error)
 	Login(
 		ctx context.Context,
 		email string,
@@ -30,30 +28,30 @@ type Auth interface {
 	) (token string, err error)
 	ValidateToken(
 		token string,
-	) (userId int64)
+	) (userId uuid.UUID)
 	Logout(
 		token string,
 	) error
 }
 
 type ServerApi struct {
-	userservice.UnimplementedAuthServiceServer
+	authService.UnimplementedAuthServiceServer
 	auth Auth
 }
 
 func Register(grpcServer *grpc.Server, auth Auth) {
-	userservice.RegisterAuthServiceServer(grpcServer, &ServerApi{auth: auth})
+	authService.RegisterAuthServiceServer(grpcServer, &ServerApi{auth: auth})
 }
 
 func (s *ServerApi) CreateUser(
 	ctx context.Context,
-	req *userservice.CreateUserRequest,
-) (*userservice.CreateUserResponse, error) {
+	req *authService.CreateUserRequest,
+) (*authService.CreateUserResponse, error) {
 	if err := validateRegisterData(req); err != nil {
 		return nil, err
 	}
 
-	userId, err := s.auth.Register(ctx, req.Email, req.Username, req.Password, req.FirstName, req.LastName)
+	userId, err := s.auth.Register(ctx, req.Email, req.Password)
 	if err != nil {
 		log.Printf("failed to register user: %v", err)
 
@@ -67,12 +65,12 @@ func (s *ServerApi) CreateUser(
 		}
 	}
 
-	return &userservice.CreateUserResponse{
-		UserId: userId,
+	return &authService.CreateUserResponse{
+		UserId: userId.String(),
 	}, nil
 }
 
-func (s *ServerApi) Login(ctx context.Context, req *userservice.LoginRequest) (*userservice.LoginResponse, error) {
+func (s *ServerApi) Login(ctx context.Context, req *authService.LoginRequest) (*authService.LoginResponse, error) {
 	err := validateLoginData(req)
 	if err != nil {
 		return nil, err
@@ -92,28 +90,28 @@ func (s *ServerApi) Login(ctx context.Context, req *userservice.LoginRequest) (*
 		}
 	}
 
-	return &userservice.LoginResponse{
+	return &authService.LoginResponse{
 		JwtToken: token,
 	}, nil
 }
 
-func (s *ServerApi) ValidateToken(ctx context.Context, req *userservice.TokenRequest) (*userservice.UserResponse, error) {
+func (s *ServerApi) ValidateToken(ctx context.Context, req *authService.TokenRequest) (*authService.UserResponse, error) {
 	if req.JwtToken == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "Token is empty")
 	}
 
 	userId := s.auth.ValidateToken(req.JwtToken)
 
-	if userId == 0 {
+	if userId == uuid.Nil {
 		return nil, status.Errorf(codes.Unauthenticated, "Token is Invalid")
 	}
 
-	return &userservice.UserResponse{
-		UserId: userId,
+	return &authService.UserResponse{
+		UserId: userId.String(),
 	}, nil
 }
 
-func (s *ServerApi) Logout(ctx context.Context, req *userservice.TokenRequest) (*emptypb.Empty, error) {
+func (s *ServerApi) Logout(ctx context.Context, req *authService.TokenRequest) (*emptypb.Empty, error) {
 	if req.JwtToken == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "Token is empty")
 	}
@@ -128,7 +126,7 @@ func (s *ServerApi) Logout(ctx context.Context, req *userservice.TokenRequest) (
 	return nil, nil
 }
 
-func validateRegisterData(req *userservice.CreateUserRequest) error {
+func validateRegisterData(req *authService.CreateUserRequest) error {
 	if req.Email == "" {
 		return status.Error(codes.InvalidArgument, "Email is required")
 	}
@@ -143,14 +141,10 @@ func validateRegisterData(req *userservice.CreateUserRequest) error {
 		return status.Error(codes.InvalidArgument, "Password is required")
 	}
 
-	if req.FirstName == "" || req.LastName == "" {
-		return status.Error(codes.InvalidArgument, "First name and Last name are required")
-	}
-
 	return nil
 }
 
-func validateLoginData(req *userservice.LoginRequest) error {
+func validateLoginData(req *authService.LoginRequest) error {
 	if req.Password == "" {
 		return status.Error(codes.InvalidArgument, "Password is required")
 	}

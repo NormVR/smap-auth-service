@@ -3,8 +3,9 @@ module auth-service
 go 1.25.0
 
 require (
-	github.com/NormVR/smap_protobuf v0.1.5
+	github.com/NormVR/smap_protobuf v0.2.4
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/stretchr/testify v1.11.1

@@ -9,6 +9,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,11 +25,8 @@ type UserSaver interface {
 	SaveUser(
 		ctx context.Context,
 		email string,
-		username string,
 		passHash []byte,
-		firstName string,
-		lastName string,
-	) (int64, error)
+	) (uuid.UUID, error)
 }
 
 type UserProvider interface {
@@ -36,13 +34,13 @@ type UserProvider interface {
 }
 
 type Cache interface {
-	StoreToken(key string, value int64, ttl time.Duration)
+	StoreToken(key string, value uuid.UUID, ttl time.Duration)
 	RemoveToken(key string) error
 }
 
 type TokenProvider interface {
 	NewToken(user *models.User) (string, time.Duration, error)
-	ValidateToken(tokenString string) int64
+	ValidateToken(tokenString string) uuid.UUID
 }
 
 // New returns a new instance of the Auth service
@@ -84,27 +82,24 @@ func (a *Auth) Login(ctx context.Context, email, password string) (string, error
 	return token, nil
 }
 
-func (a *Auth) ValidateToken(token string) int64 {
+func (a *Auth) ValidateToken(token string) uuid.UUID {
 	return a.jwtService.ValidateToken(token)
 }
 
 func (a *Auth) Register(
 	ctx context.Context,
 	email string,
-	username string,
 	password string,
-	firstName string,
-	lastName string,
-) (userId int64, err error) {
+) (userId uuid.UUID, err error) {
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println("failed to generate password hash", err)
-		return 0, fmt.Errorf("failed to generate password hash")
+		return uuid.Nil, fmt.Errorf("failed to generate password hash")
 	}
 
-	id, err := a.userSaver.SaveUser(ctx, email, username, passHash, firstName, lastName)
+	id, err := a.userSaver.SaveUser(ctx, email, passHash)
 	if err != nil {
-		return 0, fmt.Errorf("could not register new user: %w", err)
+		return uuid.Nil, fmt.Errorf("could not register new user: %w", err)
 	}
 
 	return id, nil

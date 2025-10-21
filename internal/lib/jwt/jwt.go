@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type JwtService struct {
@@ -38,7 +39,7 @@ func (j *JwtService) NewToken(user *models.User) (string, time.Duration, error) 
 	return tokenString, j.duration, nil
 }
 
-func (j *JwtService) ValidateToken(tokenString string) int64 {
+func (j *JwtService) ValidateToken(tokenString string) uuid.UUID {
 
 	tokenString = strings.TrimSpace(tokenString)
 
@@ -52,9 +53,13 @@ func (j *JwtService) ValidateToken(tokenString string) int64 {
 
 	if err != nil || !token.Valid {
 		log.Println(err)
-		return 0
+		return uuid.Nil
 	}
 	uid := (*claims)["uid"]
-
-	return int64(uid.(float64))
+	id, err := uuid.Parse(uid.(string))
+	if err != nil {
+		log.Println(err)
+		return uuid.Nil
+	}
+	return id
 }

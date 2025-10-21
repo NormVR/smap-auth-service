@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -32,51 +33,48 @@ func New(storagePath string) (*Storage, error) {
 func (s *Storage) SaveUser(
 	ctx context.Context,
 	email string,
-	username string,
 	passHash []byte,
-	firstName string,
-	lastName string,
-) (int64, error) {
-	var insertID int64
-	stmt, err := s.db.Prepare(`INSERT INTO users (email, username, pass_hash, firstname, lastname) VALUES ($1, $2, $3, $4, $5) RETURNING id`)
+) (uuid.UUID, error) {
+	var insertID uuid.UUID
+	stmt, err := s.db.Prepare(`INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3) RETURNING id`)
 
 	if err != nil {
-		return 0, err
+		return uuid.Nil, err
 	}
 
 	defer stmt.Close()
 
-	res, err := stmt.QueryContext(ctx, email, username, string(passHash), firstName, lastName)
+	id := uuid.New()
+
+	res, err := stmt.QueryContext(ctx, id, email, string(passHash))
 	if err != nil {
 		var pgxErr *pgconn.PgError
 
 		if errors.As(err, &pgxErr) && pgxErr.Code == "23505" {
 			switch pgxErr.ConstraintName {
 			case "users_email_key":
-				return 0, domain_errors.ErrUserEmailExists
-			case "users_username_key":
-				return 0, domain_errors.ErrUserUsernameExists
+				return uuid.Nil, domain_errors.ErrUserEmailExists
 			default:
-				return 0, fmt.Errorf("unknown unique constraint error: %w", err)
+				return uuid.Nil, fmt.Errorf("unknown unique constraint error: %w", err)
 			}
 		}
 
-		return 0, fmt.Errorf("failed to insert user: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to insert user: %w", err)
 	}
 
 	if res.Next() {
 		err = res.Scan(&insertID)
 		if err != nil {
-			return 0, fmt.Errorf("failed to get last ID: %w", err)
+			return uuid.Nil, fmt.Errorf("failed to get last ID: %w", err)
 		}
 	}
 
 	return insertID, err
 }
 
-// GetUser loads user from DB
+// GetUser loads user auth data from DB
 func (s *Storage) GetUser(ctx context.Context, email string) (*models.User, error) {
-	stmt, err := s.db.PrepareContext(ctx, `SELECT id, email, username, firstname, lastname, pass_hash FROM users WHERE email=$1`)
+	stmt, err := s.db.PrepareContext(ctx, `SELECT id, email, password_hash FROM users WHERE email=$1`)
 
 	if err != nil {
 		return nil, err
@@ -87,9 +85,6 @@ func (s *Storage) GetUser(ctx context.Context, email string) (*models.User, erro
 	err = stmt.QueryRowContext(ctx, email).Scan(
 		&user.ID,
 		&user.Email,
-		&user.Username,
-		&user.FirstName,
-		&user.LastName,
 		&user.PassHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

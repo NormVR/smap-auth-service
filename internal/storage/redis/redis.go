@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -23,7 +24,7 @@ func NewRedis(config *config.Config) *Redis {
 	}
 }
 
-func (app *Redis) StoreToken(key string, value int64, ttl time.Duration) {
+func (app *Redis) StoreToken(key string, value uuid.UUID, ttl time.Duration) {
 	ctx := context.Background()
 
 	if err := app.redisClient.Ping(ctx).Err(); err != nil {
