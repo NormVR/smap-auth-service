@@ -5,11 +5,13 @@ import (
 	domain_errors "auth-service/internal/domain/errors"
 	"auth-service/internal/domain/models"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -19,6 +21,7 @@ type Auth struct {
 	jwtService   TokenProvider
 	config       *config.Config
 	redis        Cache
+	kafka        MessageBroker
 }
 
 type UserSaver interface {
@@ -43,6 +46,16 @@ type TokenProvider interface {
 	ValidateToken(tokenString string) uuid.UUID
 }
 
+type MessageBroker interface {
+	Produce(msg kafka.Message) error
+}
+
+type UserCreatedEvent struct {
+	UserID    uuid.UUID `json:"user_id"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // New returns a new instance of the Auth service
 func New(
 	userSaver UserSaver,
@@ -50,6 +63,7 @@ func New(
 	jwtService TokenProvider,
 	config *config.Config,
 	redisClient Cache,
+	kafkaClient MessageBroker,
 ) *Auth {
 	return &Auth{
 		userSaver:    userSaver,
@@ -57,6 +71,7 @@ func New(
 		jwtService:   jwtService,
 		config:       config,
 		redis:        redisClient,
+		kafka:        kafkaClient,
 	}
 }
 
@@ -89,6 +104,7 @@ func (a *Auth) ValidateToken(token string) uuid.UUID {
 func (a *Auth) Register(
 	ctx context.Context,
 	email string,
+	username string,
 	password string,
 ) (userId uuid.UUID, err error) {
 	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -101,6 +117,23 @@ func (a *Auth) Register(
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("could not register new user: %w", err)
 	}
+
+	event := &UserCreatedEvent{
+		UserID:   id,
+		Username: username,
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	msg := kafka.Message{
+		Key:   []byte(event.Username),
+		Value: data,
+		Time:  time.Now(),
+	}
+
+	go a.kafka.Produce(msg)
 
 	return id, nil
 }

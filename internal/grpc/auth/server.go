@@ -19,6 +19,7 @@ type Auth interface {
 	Register(
 		ctx context.Context,
 		email string,
+		username string,
 		password string,
 	) (userId uuid.UUID, err error)
 	Login(
@@ -51,7 +52,7 @@ func (s *ServerApi) CreateUser(
 		return nil, err
 	}
 
-	userId, err := s.auth.Register(ctx, req.Email, req.Password)
+	userId, err := s.auth.Register(ctx, req.Email, req.Username, req.Password)
 	if err != nil {
 		log.Printf("failed to register user: %v", err)
 
